@@ -6,6 +6,8 @@ const bodyParser = require('body-parser');
 const csrf = require('csurf');
 const flash = require('connect-flash');
 const passport = require('passport');
+const cluster = require('cluster');
+
 const RedisStore = require('connect-redis')(session);
 const app = express();
 const routes = require('./routes');
@@ -16,17 +18,16 @@ const config = require('./config');
 const auth = require('./auth');
 const redis = require('redis').createClient();
 app.set('view engine', 'ejs');
-app.set('view options', { defaultLayout: 'layout' });
+app.set('view options', {defaultLayout: 'layout'});
 app.use(log.logger);
 app.use(partials());
 app.use(cookieParser('secret'));
 app.use(session({
-	secret: config.secret,
-	saveUninitialized: true,
-	resave: true,
-	store: new RedisStore({ host: 'localhost', port: 6397, client: redis})
-}
-));
+				secret: config.secret,
+				saveUninitialized: true,
+				resave: true,
+				store: new RedisStore({host: 'localhost', port: 6397, client: redis})
+}));
 app.use(auth.passport.initialize());
 app.use(auth.passport.session());
 app.use(bodyParser.json());
@@ -37,12 +38,40 @@ app.use(util.csrf);
 app.use(util.authenticated);
 app.use(util.templateRoutes);
 app.use(express.static(__dirname + '/static'));
-app.get('/', routes.index);
-app.get(config.routes.login, routes.login);
-app.post(config.routes.login, routes.loginProcess);
-app.get(config.routes.logout, routes.logOut);
-app.get('/chat',[util.requireAuthentication], routes.chat);
-auth.routes(app);
-app.use(errorHandlers.notFound);
-app.listen(config.port);
-console.log("App server running on port 3000");
+process.on('uncaughtException', function(err) {
+  console.log('Caught exception: ' + err);
+});
+
+if (cluster.isMaster) {
+				var numWorkers = require('os')
+								.cpus()
+								.length;
+
+				console.log('Master cluster setting up ' + numWorkers + ' workers...');
+
+				for (var i = 0; i < numWorkers; i++) {
+								cluster.fork();
+				}
+
+				cluster
+								.on('online', function (worker) {
+												console.log('Worker ' + worker.process.pid + ' is online');
+								});
+
+				cluster.on('exit', function (worker, code, signal) {
+								console.log('Worker ' + worker.process.pid + ' died with code: ' + code + ', and signal: ' + signal);
+								console.log('Starting a new worker');
+								cluster.fork();
+				});
+} else {
+				// var app = require('express')();
+				app.get('/', routes.index);
+				app.get(config.routes.login, routes.login);
+				app.post(config.routes.login, routes.loginProcess);
+				app.get(config.routes.logout, routes.logOut);
+				app.get('/chat', [util.requireAuthentication], routes.chat);
+				auth.routes(app);
+				app.use(errorHandlers.notFound);
+				app.listen(config.port);
+				console.log("App server running on port 3000");
+}
