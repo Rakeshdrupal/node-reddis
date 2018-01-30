@@ -15,7 +15,7 @@ const errorHandlers = require('./middleware/errorhandlers');
 const log = require('./middleware/log');
 const util = require('./middleware/utilities');
 const config = require('./config');
-const auth = require('./auth');
+const auth = require('./passport');
 const redis = require('redis').createClient();
 app.set('view engine', 'ejs');
 app.set('view options', {defaultLayout: 'layout'});
@@ -38,8 +38,8 @@ app.use(util.csrf);
 app.use(util.authenticated);
 app.use(util.templateRoutes);
 app.use(express.static(__dirname + '/static'));
-process.on('uncaughtException', function(err) {
-  console.log('Caught exception: ' + err);
+process.on('uncaughtException', function (err) {
+				console.log('Caught exception: ' + err);
 });
 
 if (cluster.isMaster) {
@@ -67,8 +67,9 @@ if (cluster.isMaster) {
 				// var app = require('express')();
 				app.get('/', routes.index);
 				app.get(config.routes.login, routes.login);
-				app.post(config.routes.login, routes.loginProcess);
 				app.get(config.routes.logout, routes.logOut);
+				app.get(config.routes.register, routes.register);
+				app.post(config.routes.register, routes.registerProcess);
 				app.get('/chat', [util.requireAuthentication], routes.chat);
 				auth.routes(app);
 				app.use(errorHandlers.notFound);

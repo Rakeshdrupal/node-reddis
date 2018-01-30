@@ -1,6 +1,8 @@
 const passport = require('passport'),
     facebook = require('passport-facebook').Strategy,
     google = require('passport-google-oauth').OAuth2Strategy,
+    local = require('passport-local').Strategy,
+    user = require('./user'),
     config = require('../config');
 passport.use(new facebook({
     clientID: config.facebook.appID,
@@ -16,6 +18,31 @@ passport.use(new google({
 }, function (accessToken, refreshToken, profile, done) {
     done(null, profile);
 }));
+passport.use(new local(function(username, password, done){
+	user.findByUsername(username, function(err, profile){
+		if(profile)
+		{
+			passwordUtils.passwordCheck(password, profile.password, profile.salt, profile.work, function(err,isAuth){
+				if(isAuth)
+				{
+					if (profile.work < config.crypto.workFactor)
+					{
+						user.updatePassword(username, password, config.crypto.workFactor);
+					}
+					done(null, profile);
+				}
+				else
+				{
+					done(null, false, {message: 'Wrong Username or Password'});
+				}
+			});
+		}
+		else
+		{
+			done(null, false, {message: 'Wrong Username or Password'});
+		}
+	});
+}));
 passport.serializeUser(function (user, done) {
     console.log(user);
     done(null, user);
@@ -23,6 +50,7 @@ passport.serializeUser(function (user, done) {
 passport.deserializeUser(function (user, done) {
     done(null, user);
 });
+
 const routes = function routes(app) {
     app.get(config.routes.facebookAuth, passport.authenticate('facebook'));
     app.get(config.routes.facebookAuthCallback, passport.authenticate('facebook', {
@@ -38,6 +66,7 @@ const routes = function routes(app) {
         failureRedirect: config.routes.login,
         failureFlash: true
     }));
+    app.post(config.routes.login, passport.authenticate('local',{successRedirect: '/chat', failureRedirect: config.routes.login,failureFlash: true}));
 };
 exports.passport = passport;
 exports.routes = routes;
